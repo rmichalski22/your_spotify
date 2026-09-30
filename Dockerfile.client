@@ -5,7 +5,7 @@ WORKDIR /app
 ENV MONGO_ENDPOINT=mongodb://mongo:27017/your_spotify
 
 RUN apk add python3 gcc g++ make cmake
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10
 
 COPY pnpm-lock.yaml pnpm-lock.yaml
 COPY package.json package.json
@@ -18,7 +18,7 @@ COPY apps/client/package.json apps/client/package.json
 COPY apps/client/tsconfig.json apps/client/tsconfig.json
 COPY apps/client/rsbuild.config.ts apps/client/rsbuild.config.ts
 
-RUN CI=true pnpm install --frozen-lockfile --dangerously-allow-all-builds
+RUN CI=true pnpm install --frozen-lockfile
 
 COPY apps/client/public apps/client/public
 COPY apps/client/scripts apps/client/scripts
