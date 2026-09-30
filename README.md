@@ -11,6 +11,30 @@
 **YourSpotify** is a self-hosted application that tracks what you listen and offers you a dashboard to explore statistics about it!
 It's composed of a web server which polls the Spotify API every now and then and a web application on which you can explore your statistics.
 
+## Deploy this fork with Docker Compose
+
+This deployment builds the server and web images from this repository. The upstream `docker-compose-example.yml` pulls community images and does not include this fork's import fixes.
+
+1. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app and register the redirect URI `http://127.0.0.1:8080/oauth/spotify/callback` for a same-machine deployment. Spotify requires the redirect URI to match exactly and [does not accept `localhost`](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
+2. Clone this fork and make local configuration files:
+
+   ```sh
+   git clone https://github.com/rmichalski22/your_spotify.git
+   cd your_spotify
+   cp .env.example .env
+   cp docker-compose-personal.example.yml docker-compose-personal.yml
+   ```
+
+3. Open `.env` and enter the app's **Client ID** as `SPOTIFY_PUBLIC` and **Client Secret** as `SPOTIFY_SECRET`. Keep `.env` private; Git ignores it. The supplied endpoints work when you open the site on the Docker host. For access from another device, set `API_ENDPOINT` and `CLIENT_ENDPOINT` to reachable HTTPS URLs and register `${API_ENDPOINT}/oauth/spotify/callback` in Spotify.
+4. Build and start the containers:
+
+   ```sh
+   docker compose -f docker-compose-prod.yml -f docker-compose-personal.yml up -d --build
+   docker compose -f docker-compose-prod.yml -f docker-compose-personal.yml logs -f app web
+   ```
+
+Open `http://127.0.0.1:3000` on the Docker host. To stop the app, run `docker compose -f docker-compose-prod.yml -f docker-compose-personal.yml down`. The MongoDB data is stored in `./db_data`; if moving an existing installation, point the `mongo` volume in `docker-compose-prod.yml` at your existing database directory before starting.
+
 # Table of contents
 
 - [Prerequisites](#prerequisites)
@@ -34,7 +58,7 @@ It's composed of a web server which polls the Spotify API every now and then and
 
 1. You have to own a Spotify application ID that you can create through their [dashboard](https://developer.spotify.com/dashboard/applications).
 2. You need to provide the **Server** environment the **public** AND **secret** key of the application (cf. [Installation](#installation)).
-3. You need to provide an **authorized** redirect URI to the `docker-compose` file.
+3. Register the exact callback URL in the Spotify Developer Dashboard.
 
 > A tutorial is available at the end of this readme.
 
@@ -42,40 +66,7 @@ It's composed of a web server which polls the Spotify API every now and then and
 
 ## Using `docker-compose`
 
-Follow the [docker-compose-example.yml](https://github.com/Yooooomi/your_spotify/blob/master/docker-compose-example.yml) to host your application through docker.
-
-```yml
-services:
-  server:
-    image: yooooomi/your_spotify_server
-    restart: always
-    ports:
-      - "8080:8080"
-    links:
-      - mongo
-    depends_on:
-      - mongo
-    environment:
-      API_ENDPOINT: http://localhost:8080 # This MUST be included as a valid URL in the spotify dashboard (see below)
-      CLIENT_ENDPOINT: http://localhost:3000
-      SPOTIFY_PUBLIC: __your_spotify_client_id__
-      SPOTIFY_SECRET: __your_spotify_secret__
-
-  web:
-    image: yooooomi/your_spotify_client
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      API_ENDPOINT: http://localhost:8080
-
-  mongo:
-    container_name: mongo
-    image: mongo:8
-    volumes:
-      - ./your_spotify_db:/data/db
-
-```
+Follow [Deploy this fork with Docker Compose](#deploy-this-fork-with-docker-compose) above. The production Compose file builds both application images from this checkout.
 
 ## Installing locally (not recommended)
 
@@ -95,11 +86,18 @@ You can follow the instructions [here](https://github.com/Yooooomi/your_spotify/
 | PROMETHEUS_PASSWORD             | _not defined_ | Prometheus basic auth password |
 | LOG_LEVEL             | info | The log level, debug is useful if you encouter any bugs |
 | CORS                  | _not defined_ | List of comma-separated origin allowed (not required; defaults to CLIENT_ENDPOINT) |
-| COOKIE_VALIDITY_MS    | 1h | Validity time of the authentication cookie, following [this pattern](https://github.com/vercel/ms) |
+| COOKIE_VALIDITY_MS    | 30d | Validity time of the authentication cookie and token, following [this pattern](https://github.com/vercel/ms) |
+| SPOTIFY_REQUESTS_PER_30_SECONDS | 10 | Conservative app-wide Web API request budget in Spotify's rolling 30-second window. Keep this low for development-mode apps; Spotify does not publish a fixed limit. |
 | MAX_IMPORT_CACHE_SIZE | Infinite | The maximum element in the cache when importing data from an outside source, more cache means less requests to Spotify, resulting in faster imports |
 | MONGO_NO_ADMIN_RIGHTS | false | Do not ask for admin right on the Mongo database |
 | PORT                  | 8080 | The port of the server, **do not** modify if you're using docker |
 | FRAME_ANCESTORS       | _not defined_ | Sites allowed to frame the website, comma separated list of URLs (`i-want-a-security-vulnerability-and-want-to-allow-all-frame-ancestors` to allow every website) |
+
+### Large history imports and Spotify limits
+
+Spotify measures Web API rate limits over a [rolling 30-second window](https://developer.spotify.com/documentation/web-api/concepts/rate-limits), but does not publish a fixed call count for development-mode apps. The server defaults to 10 requests per 30 seconds across all users and keeps two of those slots available for login and token requests. A Spotify rate-limit response pauses the shared queue for `Retry-After` and reduces its request budget. Set `SPOTIFY_REQUESTS_PER_30_SECONDS` lower if your app still receives rate-limit responses.
+
+Development-mode apps also have [separate per-developer quota buckets](https://developer.spotify.com/documentation/web-api/concepts/quota-modes). If Spotify reports `QUOTA_EXCEEDED`, the import stops without retrying the exhausted bucket; the failed import can be retried from Settings after quota is available again. Imports with many unique tracks can take hours because [development-mode bulk track, album, and artist lookups are unavailable](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide).
 
 ## Advanced CORS settings
 
@@ -116,17 +114,14 @@ To do so, you need to create a **Spotify application** [here](https://developer.
 
 1. Click on **Create app**.
 2. Fill out all the information.
-3. Set the redirect URI, corresponding to your **server** location on the internet (or your local network) adding the suffix **/oauth/spotify/callback** (**/api/oauth/spotify/callback** if using the [linuxserver](https://github.com/linuxserver/docker-your_spotify) image).
-- i.e: `http://localhost:8080/oauth/spotify/callback` or `http://home.mydomain.com/your_spotify_backend/oauth/spotify/callback`
+3. Set the redirect URI to your **server** URL plus `/oauth/spotify/callback`, for example `http://127.0.0.1:8080/oauth/spotify/callback` for a same-machine install. Use HTTPS for a non-loopback URL.
 4. Check **Web API**
 5. Check **I understand and agree**
 6. Hit **Settings** at the top right corner
-7. Copy the **public** and the **secret** key into your `docker-compose` file under the name of `SPOTIFY_PUBLIC` and `SPOTIFY_SECRET`
-   respectively.
+7. Copy the **Client ID** and **Client Secret** into your private `.env` file as `SPOTIFY_PUBLIC` and `SPOTIFY_SECRET`, respectively.
 8. Once you have created your application, Spotify wants you to register the users that will be able to access the application. (You don't need to do that for the account that created the application)
    1. Click the **User Management** button
    2. Enter the required information, a name and the email the user's Spotify account has been created with.
-   3. (Optional) You can **Request extension** if you do not want to register the users by hand.
 
 # Importing past history
 

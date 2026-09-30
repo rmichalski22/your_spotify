@@ -27,6 +27,10 @@ interface QueueState {
   highPriorityQueue: QueueItem<any>[];
   normalPriorityQueue: QueueItem<any>[];
   isProcessingQueue: boolean;
+  requestTimes: number[];
+  cooldownUntil: number;
+  maxRequests: number;
+  nextTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export class HttpError extends Error {
@@ -45,13 +49,18 @@ export class HttpError extends Error {
 }
 
 const DEFAULT_RETRY_429_MAX_ATTEMPTS = 5;
-const DEFAULT_RETRY_AFTER_MS = 1000;
+const DEFAULT_RETRY_AFTER_MS = 30_000;
+const RATE_WINDOW_MS = 30_000;
 
 function createQueueState(): QueueState {
   return {
     highPriorityQueue: [],
     normalPriorityQueue: [],
     isProcessingQueue: false,
+    requestTimes: [],
+    cooldownUntil: 0,
+    maxRequests: 0,
+    nextTimer: null,
   };
 }
 
@@ -62,8 +71,11 @@ export class QueuedHttpClientFactory {
     private readonly options: {
       baseURL: string;
       headers: Record<string, string>;
+      maxRequestsPerWindow?: number;
     },
-  ) {}
+  ) {
+    this.queueState.maxRequests = options.maxRequestsPerWindow ?? 0;
+  }
 
   createClient(headers: Record<string, string>) {
     const mergedHeaders = { ...this.options.headers, ...headers };
@@ -138,10 +150,24 @@ export class QueuedHttpClient {
       return;
     }
 
-    const next = this.dequeueNext();
+    if (this.queueState.nextTimer) {
+      clearTimeout(this.queueState.nextTimer);
+      this.queueState.nextTimer = null;
+    }
+    const next =
+      this.queueState.highPriorityQueue[0] ??
+      this.queueState.normalPriorityQueue[0];
     if (!next) {
       return;
     }
+
+    const waitMs = this.getRateLimitWait(next.config.priority === "high");
+    if (waitMs > 0) {
+      this.queueState.nextTimer = setTimeout(() => this.processQueue(), waitMs);
+      return;
+    }
+
+    this.dequeueNext();
 
     this.queueState.isProcessingQueue = true;
 
@@ -173,6 +199,10 @@ export class QueuedHttpClient {
       credentials: "include",
     };
 
+    // Count attempts before sending so concurrent clients share the same rolling window.
+    if (this.queueState.maxRequests > 0) {
+      this.queueState.requestTimes.push(Date.now());
+    }
     const response = await fetch(url, payload);
 
     if (!response.ok) {
@@ -189,6 +219,28 @@ export class QueuedHttpClient {
       const maxAttempts =
         queueItem.config.retry429MaxAttempts ?? DEFAULT_RETRY_429_MAX_ATTEMPTS;
 
+      // Development-mode quota exhaustion has no documented reset time. Retrying
+      // it would only spend more quota and can keep the user locked out.
+      if (this.isQuotaExceeded(text)) {
+        throw new HttpError({
+          status: response.status,
+          statusText: response.statusText,
+          body: text,
+        });
+      }
+
+      const retryAfterMs = this.parseRetryAfterHeader(response);
+      this.queueState.cooldownUntil = Math.max(
+        this.queueState.cooldownUntil,
+        Date.now() + retryAfterMs,
+      );
+      if (this.queueState.maxRequests > 1) {
+        this.queueState.maxRequests = Math.max(
+          1,
+          Math.floor(this.queueState.maxRequests / 2),
+        );
+      }
+
       if (queueItem.retry429AttemptCount >= maxAttempts) {
         throw new HttpError({
           status: response.status,
@@ -199,12 +251,10 @@ export class QueuedHttpClient {
 
       queueItem.retry429AttemptCount += 1;
       this.requeue(queueItem);
-
-      const retryAfterMs = this.parseRetryAfterHeader(response);
-      await this.sleep(retryAfterMs);
+      return;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as T;
     queueItem.resolve({
       data,
       status: response.status,
@@ -259,9 +309,29 @@ export class QueuedHttpClient {
     return Math.max(0, retryAtTimestamp - Date.now());
   }
 
-  private sleep(ms: number) {
-    return new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
-    });
+  private isQuotaExceeded(body: string) {
+    try {
+      return JSON.parse(body)?.error?.reason === "QUOTA_EXCEEDED";
+    } catch {
+      return false;
+    }
+  }
+
+  private getRateLimitWait(highPriority: boolean) {
+    const now = Date.now();
+    this.queueState.requestTimes = this.queueState.requestTimes.filter(
+      (time) => time > now - RATE_WINDOW_MS,
+    );
+    const max = this.queueState.maxRequests;
+    // Keep two slots available for interactive requests, including login.
+    const budget = highPriority ? max : Math.max(1, max - 2);
+    const oldest = this.queueState.requestTimes[0];
+    const rateWait =
+      max > 0 &&
+      this.queueState.requestTimes.length >= budget &&
+      oldest !== undefined
+        ? oldest + RATE_WINDOW_MS - now + 1
+        : 0;
+    return Math.max(0, this.queueState.cooldownUntil - now, rateWait);
   }
 }

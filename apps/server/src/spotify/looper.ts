@@ -7,10 +7,8 @@ import { User } from "../database/schemas/user";
 import { HttpError } from "../tools/apis/queueHttpClient";
 import { SpotifyAPI } from "../tools/apis/spotifyApi";
 import { logger } from "../tools/logger";
-import { retryPromise, wait } from "../tools/misc";
+import { wait } from "../tools/misc";
 import { getTracksAlbumsArtists, storeIterationOfLoop } from "./dbTools";
-
-const RETRY = 10;
 
 const loop = async (user: User) => {
   logger.info(`[${user.username}]: refreshing...`);
@@ -31,11 +29,7 @@ const loop = async (user: User) => {
   let nextUrl = url;
 
   do {
-    const response = await retryPromise(
-      () => spotifyApi.raw(nextUrl),
-      RETRY,
-      30,
-    );
+    const response = await spotifyApi.raw(nextUrl);
     const { data } = response;
     items.push(...data.items);
     nextUrl = data.next;

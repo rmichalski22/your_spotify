@@ -116,8 +116,11 @@ export class SpotifyAPI {
       const client = await this.checkToken();
       const res = await client.get(`/tracks/${id}`);
       return res.data as SpotifyTrack;
-    } catch {
-      return undefined;
+    } catch (e) {
+      if (e instanceof HttpError && (e.status === 400 || e.status === 404)) {
+        return undefined;
+      }
+      throw e;
     }
   }
 
@@ -135,8 +138,11 @@ export class SpotifyAPI {
       const client = await this.checkToken();
       const res = await client.get(`/albums/${id}`);
       return res.data as SpotifyAlbum;
-    } catch {
-      return undefined;
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 404) {
+        return undefined;
+      }
+      throw e;
     }
   }
 
@@ -154,8 +160,11 @@ export class SpotifyAPI {
       const client = await this.checkToken();
       const res = await client.get(`/artists/${id}`);
       return res.data as SpotifyArtist;
-    } catch {
-      return undefined;
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 404) {
+        return undefined;
+      }
+      throw e;
     }
   }
 

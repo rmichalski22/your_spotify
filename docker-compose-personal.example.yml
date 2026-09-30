@@ -1,0 +1,12 @@
+# Copy to docker-compose-personal.yml. Docker Compose reads secrets from .env.
+services:
+  app:
+    environment:
+      SPOTIFY_PUBLIC: ${SPOTIFY_PUBLIC:?Set SPOTIFY_PUBLIC in .env}
+      SPOTIFY_SECRET: ${SPOTIFY_SECRET:?Set SPOTIFY_SECRET in .env}
+      API_ENDPOINT: ${API_ENDPOINT:-http://127.0.0.1:8080}
+      CLIENT_ENDPOINT: ${CLIENT_ENDPOINT:-http://127.0.0.1:3000}
+      SPOTIFY_REQUESTS_PER_30_SECONDS: ${SPOTIFY_REQUESTS_PER_30_SECONDS:-10}
+  web:
+    environment:
+      API_ENDPOINT: ${API_ENDPOINT:-http://127.0.0.1:8080}

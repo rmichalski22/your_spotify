@@ -16,6 +16,10 @@ const validators = {
   NODE_ENV: z.enum(["production", "development"]).optional(),
   OFFLINE_DEV_ID: z.string().optional(),
   COOKIE_VALIDITY_MS: z.string().optional(),
+  SPOTIFY_REQUESTS_PER_30_SECONDS: z.preprocess(
+    toNumber,
+    z.number().int().positive().optional(),
+  ),
   MONGO_NO_ADMIN_RIGHTS: z.preprocess(toBoolean, z.boolean().optional()),
   PROMETHEUS_USERNAME: z.string().optional(),
   PROMETHEUS_PASSWORD: z.string().optional(),

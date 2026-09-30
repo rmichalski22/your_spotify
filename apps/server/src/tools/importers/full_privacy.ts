@@ -17,7 +17,7 @@ import {
 } from "../../spotify/dbTools";
 import { SpotifyAPI } from "../apis/spotifyApi";
 import { logger } from "../logger";
-import { minOfArray, retryPromise } from "../misc";
+import { minOfArray } from "../misc";
 import { Unpack } from "../types";
 import { getFromCacheString, setToCacheString } from "./cache";
 import { FullPrivacyImporterState, HistoryImporter } from "./types";
@@ -59,12 +59,7 @@ export class FullPrivacyImporter implements HistoryImporter<"full-privacy"> {
     if (spotifyIds.length === 0) {
       return [];
     }
-    const res = await retryPromise(
-      () => this.spotifyApi.getTracks(spotifyIds),
-      10,
-      30,
-    );
-    return res;
+    return this.spotifyApi.getTracks(spotifyIds);
   };
 
   storeItems = async (userId: string, items: RecentlyPlayedTrack[]) => {
@@ -222,7 +217,8 @@ export class FullPrivacyImporter implements HistoryImporter<"full-privacy"> {
       if (content.ms_played < 30 * 1000) {
         // If track was played for less than 30 seconds
         logger.info(
-          `Track ${content.master_metadata_track_name} - ${content.master_metadata_album_artist_name
+          `Track ${content.master_metadata_track_name} - ${
+            content.master_metadata_album_artist_name
           } was passed, only listened for ${Math.floor(
             content.ms_played / 1000,
           )} seconds`,

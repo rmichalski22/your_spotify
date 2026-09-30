@@ -67,9 +67,16 @@ export const getArtists = async (userId: string, ids: string[]) => {
 
 const getTracksAndRelatedAlbumArtists = async (
   userId: string,
-  ids: string[],
+  spotifyTracks: SpotifyTrack[],
 ) => {
-  const tracks = await getTracks(userId, ids);
+  // Search and track lookup already returned the metadata needed to store tracks.
+  // Fetching every track again doubled the import's track API usage.
+  const tracks = spotifyTracks.map<Track>((track) => ({
+    ...track,
+    album: track.album.id,
+    artists: track.artists.map((artist) => artist.id),
+  }));
+  Metrics.ingestedTracksTotal.inc({ user: userId }, tracks.length);
 
   return {
     tracks,
@@ -98,7 +105,10 @@ export const getTracksAlbumsArtists = async (
     tracks,
     artists: relatedArtists,
     albums: relatedAlbums,
-  } = await getTracksAndRelatedAlbumArtists(userId, missingTrackIds);
+  } = await getTracksAndRelatedAlbumArtists(
+    userId,
+    spotifyTracks.filter((track) => missingTrackIds.includes(track.id)),
+  );
 
   const storedAlbums: Album[] = await AlbumModel.find({
     id: { $in: relatedAlbums },

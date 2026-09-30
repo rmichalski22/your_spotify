@@ -17,12 +17,7 @@ import {
 } from "../../spotify/dbTools";
 import { SpotifyAPI } from "../apis/spotifyApi";
 import { logger } from "../logger";
-import {
-  beforeParenthesis,
-  minOfArray,
-  removeDiacritics,
-  retryPromise,
-} from "../misc";
+import { beforeParenthesis, minOfArray, removeDiacritics } from "../misc";
 import { Unpack } from "../types";
 import { getFromCache, setToCache, SpotifyTrackCacheItem } from "./cache";
 import { HistoryImporter, PrivacyImporterState } from "./types";
@@ -58,12 +53,7 @@ export class PrivacyImporter implements HistoryImporter<"privacy"> {
   }
 
   search = async (track: string, artist: string) => {
-    const res = await retryPromise(
-      () => this.spotifyApi.search(track, artist),
-      10,
-      30,
-    );
-    return res;
+    return this.spotifyApi.search(track, artist);
   };
 
   storeItems = async (userId: string, items: RecentlyPlayedTrack[]) => {
@@ -192,7 +182,8 @@ export class PrivacyImporter implements HistoryImporter<"privacy"> {
       if (content.msPlayed < 30 * 1000) {
         // If track was played for less than 30 seconds
         logger.info(
-          `Track ${content.trackName} - ${content.artistName
+          `Track ${content.trackName} - ${
+            content.artistName
           } was passed, only listened for ${Math.floor(
             content.msPlayed / 1000,
           )} seconds`,

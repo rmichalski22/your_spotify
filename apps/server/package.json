@@ -6,6 +6,7 @@
     "build": "rsbuild build",
     "start": "node build/index.js",
     "typecheck": "tsc --noEmit",
+    "test": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' node --require ts-node/register --test src/tools/apis/queueHttpClient.test.ts",
     "dev": "concurrently \"rsbuild build -w\" \"nodemon build/index.js\"",
     "migrate": "node ./build/index.js --migrate",
     "lint": "oxlint -c ../dev/.oxlintrc.json . && oxfmt -c ../dev/.oxfmtrc.json --check .",

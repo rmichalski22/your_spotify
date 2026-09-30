@@ -93,6 +93,7 @@ export async function runImporter<T extends ImporterStateType>(
   userImporters[userId] = instance;
   clearCache(userId);
   let existingState: ImporterStateFromType<T> | null = null;
+  let initResponded = false;
   try {
     if (existingStateId) {
       existingState = (await getImporterState<T>(existingStateId)) ?? null;
@@ -102,6 +103,7 @@ export async function runImporter<T extends ImporterStateType>(
       if (existingState) {
         await cleanupImport(existingState._id.toString());
       }
+      initResponded = true;
       return initDone(false);
     }
     if (existingState) {
@@ -120,14 +122,23 @@ export async function runImporter<T extends ImporterStateType>(
         data,
       )) as any as ImporterStateFromType<T>;
     }
+    initResponded = true;
     initDone(true);
-    await instance.run(existingState._id.toString());
+    const completed = await instance.run(existingState._id.toString());
+    if (!completed) {
+      throw new Error(
+        "Importer stopped before processing the uploaded history",
+      );
+    }
     await instance.cleanup(requiredInitData);
     await setImporterStateStatus(existingState._id.toString(), "success");
     Metrics.importsTotal
       .labels({ status: "success", user: userId, type: name })
       .inc();
   } catch (e) {
+    if (!initResponded) {
+      initDone(false);
+    }
     if (existingState) {
       await setImporterStateStatus(existingState._id.toString(), "failure");
       Metrics.importsTotal
@@ -138,7 +149,8 @@ export async function runImporter<T extends ImporterStateType>(
     logger.error(
       "This import failed, but metadata is kept so that you can retry it later in the settings",
     );
+  } finally {
+    clearCache(userId);
+    delete userImporters[userId];
   }
-  clearCache(userId);
-  delete userImporters[userId];
 }

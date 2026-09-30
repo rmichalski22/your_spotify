@@ -42,6 +42,7 @@ export class Spotify implements Provider {
     const { data } = await this.client.post(
       "https://accounts.spotify.com/api/token",
       {
+        priority: "high",
         params: {
           grant_type: "authorization_code",
           code,
@@ -65,6 +66,7 @@ export class Spotify implements Provider {
     const { data } = await this.client.post(
       "https://accounts.spotify.com/api/token",
       {
+        priority: "high",
         params: { grant_type: "refresh_token", refresh_token: refresh },
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",

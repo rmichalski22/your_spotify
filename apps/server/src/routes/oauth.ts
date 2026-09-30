@@ -1,5 +1,5 @@
 import { Request, Response, Router } from "express";
-import { sign } from "jsonwebtoken";
+import { decode, sign } from "jsonwebtoken";
 import { z } from "zod";
 
 import {
@@ -28,10 +28,15 @@ function storeTokenInCookie(
   response: Response,
   token: string,
 ) {
+  const payload = decode(token);
+  if (!payload || typeof payload === "string" || !payload.exp || !payload.iat) {
+    throw new Error("Authentication token has no expiry");
+  }
   response.cookie("token", token, {
     sameSite: "strict",
     httpOnly: true,
     secure: request.secure,
+    maxAge: (payload.exp - payload.iat) * 1000,
   });
 }
 
@@ -47,7 +52,7 @@ router.get("/spotify", async (req, res) => {
       throw new Error("No private data found, cannot sign JWT");
     }
     const token = sign({ userId: isOffline }, privateData.jwtPrivateKey, {
-      expiresIn: getWithDefault("COOKIE_VALIDITY_MS", "1h") as `${number}`,
+      expiresIn: getWithDefault("COOKIE_VALIDITY_MS", "30d") as `${number}`,
     });
     storeTokenInCookie(req, res, token);
     res.status(204).end();
@@ -106,7 +111,7 @@ router.get("/spotify/callback", withGlobalPreferences, async (req, res) => {
     const token = sign(
       { userId: user._id.toString() },
       privateData.jwtPrivateKey,
-      { expiresIn: getWithDefault("COOKIE_VALIDITY_MS", "1h") as `${number}` },
+      { expiresIn: getWithDefault("COOKIE_VALIDITY_MS", "30d") as `${number}` },
     );
     storeTokenInCookie(req, res, token);
   } catch (e) {
@@ -119,8 +124,6 @@ router.get("/spotify/callback", withGlobalPreferences, async (req, res) => {
 
 router.get("/spotify/me", logged, withHttpClient, async (req, res) => {
   const { client } = req as SpotifyRequest;
-
-  console.log("WYTFUDGZJDGHZAKJHDKJZHZDKJHAZJKDHZAJKDHJKAHZ");
 
   try {
     const me = await client.me();
