@@ -17,20 +17,24 @@ export const connect = async () => {
   const fallbackConnection = "mongodb://mongo:27017/your_spotify";
   const endpoint = getWithDefault("MONGO_ENDPOINT", fallbackConnection);
   logger.info(`Trying to connect to database at ${endpoint}`);
-  let client: Mongoose | undefined;
   let lastError: Error | undefined;
   for (let i = 0; i < TRIES; i += 1) {
     try {
-      client = await connectToDb(endpoint, { connectTimeoutMS: 3000 });
+      const client: Mongoose = await connectToDb(endpoint, {
+        connectTimeoutMS: 3000,
+      });
+      logger.info("Connected to database !");
+      return client;
     } catch (e) {
       lastError = e;
-      logger.error(`Failed to connect to database, try ${i + 1}/${TRIES}`);
-      await wait(WAIT_MS);
+      logger.error(
+        `Failed to connect to database, try ${i + 1}/${TRIES}:`,
+        e instanceof Error ? e.message : e,
+      );
+      if (i < TRIES - 1) {
+        await wait(WAIT_MS);
+      }
     }
   }
-  if (!client) {
-    throw lastError;
-  }
-  logger.info("Connected to database !");
-  return client;
+  throw lastError;
 };

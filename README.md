@@ -13,36 +13,25 @@ It's composed of a web server which polls the Spotify API every now and then and
 
 ## Deploy this fork with Docker Compose
 
-This deployment builds the server and web images from this repository. The upstream `docker-compose-example.yml` pulls community images and does not include this fork's import fixes.
+The default [`compose.yaml`](compose.yaml) builds this fork's server and web images and starts MongoDB. Only a private `.env` file is needed.
 
-1. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app and register the exact redirect URI `${API_ENDPOINT}/oauth/spotify/callback`. For the default same-machine setup, that is `http://127.0.0.1:8080/oauth/spotify/callback`. Spotify [does not accept `localhost`](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
-2. Clone this fork and make local configuration files:
+```sh
+git clone https://github.com/rmichalski22/your_spotify.git
+cd your_spotify
+cp .env.example .env
+```
 
-   ```sh
-   git clone https://github.com/rmichalski22/your_spotify.git
-   cd your_spotify
-   cp .env.example .env
-   cp docker-compose-personal.example.yml docker-compose-personal.yml
-   ```
+Edit `.env`: enter your Spotify **Client ID** as `SPOTIFY_PUBLIC` and **Client Secret** as `SPOTIFY_SECRET`. The example maps host ports **8089** and **3010**. For a browser on the Docker host, its endpoint URLs are `http://127.0.0.1:8089` and `http://127.0.0.1:3010`. Register `http://127.0.0.1:8089/oauth/spotify/callback` in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Spotify [does not accept `localhost` and requires HTTPS outside loopback](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
 
-3. Open `.env` and enter the app's **Client ID** as `SPOTIFY_PUBLIC` and **Client Secret** as `SPOTIFY_SECRET`. Keep `.env` private; Git ignores it. To use host ports **8089** and **3010** on the same machine, also set:
+For a browser on another device, change `API_ENDPOINT` and `CLIENT_ENDPOINT` in `.env` to reachable HTTPS URLs, route those hostnames to ports 8089 and 3010, and register `${API_ENDPOINT}/oauth/spotify/callback` in Spotify. Keep `.env` private; Git ignores it.
 
-   ```dotenv
-   SERVER_PORT=8089
-   CLIENT_PORT=3010
-   API_ENDPOINT=http://127.0.0.1:8089
-   CLIENT_ENDPOINT=http://127.0.0.1:3010
-   ```
+Start the application:
 
-   Register `http://127.0.0.1:8089/oauth/spotify/callback` in Spotify for that setup. Docker still uses ports 8080 and 3000 *inside* the containers. If you open the site from another device, use reachable HTTPS URLs for `API_ENDPOINT` and `CLIENT_ENDPOINT`, point your reverse proxy at the chosen host ports, and register the HTTPS API callback in Spotify.
-4. Build and start the containers:
+```sh
+docker compose up -d
+```
 
-   ```sh
-   docker compose -f docker-compose-prod.yml -f docker-compose-personal.yml up -d --build
-   docker compose -f docker-compose-prod.yml -f docker-compose-personal.yml logs -f app web
-   ```
-
-Open the URL set as `CLIENT_ENDPOINT` on the Docker host. To stop the app, run `docker compose -f docker-compose-prod.yml -f docker-compose-personal.yml down`. The MongoDB data is stored in `./db_data`; if moving an existing installation, point the `mongo` volume in `docker-compose-prod.yml` at your existing database directory before starting.
+Check startup with `docker compose ps` and `docker compose logs --tail=100 mongo app web`. The app waits for MongoDB to become healthy. The database stays in `./db_data`, so do not delete that directory when updating. After pulling code changes, run `docker compose up -d` again; Compose rebuilds the application images from this checkout.
 
 # Table of contents
 
@@ -75,7 +64,7 @@ Open the URL set as `CLIENT_ENDPOINT` on the Docker host. To stop the app, run `
 
 ## Using `docker-compose`
 
-Follow [Deploy this fork with Docker Compose](#deploy-this-fork-with-docker-compose) above. The production Compose file builds both application images from this checkout.
+Follow [Deploy this fork with Docker Compose](#deploy-this-fork-with-docker-compose) above. The default `compose.yaml` builds both application images from this checkout.
 
 ## Installing locally (not recommended)
 
@@ -87,8 +76,8 @@ You can follow the instructions [here](https://github.com/Yooooomi/your_spotify/
 | :--- | :--- | :--- |
 | CLIENT_ENDPOINT       | REQUIRED | The endpoint of your web application |
 | API_ENDPOINT          | REQUIRED | The endpoint of your server |
-| SERVER_PORT           | 8080 | Host port mapped to the server container's port 8080; update `API_ENDPOINT` to match |
-| CLIENT_PORT           | 3000 | Host port mapped to the web container's port 3000; update `CLIENT_ENDPOINT` to match |
+| SERVER_PORT           | 8089 in `.env.example` | Host port mapped to the server container's port 8080; update `API_ENDPOINT` to match |
+| CLIENT_PORT           | 3010 in `.env.example` | Host port mapped to the web container's port 3000; update `CLIENT_ENDPOINT` to match |
 | SPOTIFY_PUBLIC        | REQUIRED | The public key of your Spotify application (cf [Creating the Spotify Application](#creating-the-spotify-application)) |
 | SPOTIFY_SECRET        | REQUIRED | The secret key of your Spotify application (cf [Creating the Spotify Application](#creating-the-spotify-application)) |
 | TIMEZONE              | Europe/Paris | The timezone of your stats, only affects read requests since data is saved with UTC time |

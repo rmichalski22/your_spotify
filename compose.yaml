@@ -1,0 +1,42 @@
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - ./db_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.server.production
+    pull_policy: build
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      MONGO_ENDPOINT: mongodb://mongo:27017/your_spotify
+      API_ENDPOINT: ${API_ENDPOINT:?Set API_ENDPOINT in .env}
+      CLIENT_ENDPOINT: ${CLIENT_ENDPOINT:?Set CLIENT_ENDPOINT in .env}
+      SPOTIFY_PUBLIC: ${SPOTIFY_PUBLIC:?Set SPOTIFY_PUBLIC in .env}
+      SPOTIFY_SECRET: ${SPOTIFY_SECRET:?Set SPOTIFY_SECRET in .env}
+      SPOTIFY_REQUESTS_PER_30_SECONDS: ${SPOTIFY_REQUESTS_PER_30_SECONDS:-10}
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.client.production
+    pull_policy: build
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-3000}:3000"
+    environment:
+      API_ENDPOINT: ${API_ENDPOINT:?Set API_ENDPOINT in .env}
