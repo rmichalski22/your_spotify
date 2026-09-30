@@ -15,7 +15,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server.production
-    pull_policy: build
     restart: unless-stopped
     depends_on:
       mongo:
@@ -34,7 +33,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.client.production
-    pull_policy: build
     restart: unless-stopped
     ports:
       - "${CLIENT_PORT:-3000}:3000"

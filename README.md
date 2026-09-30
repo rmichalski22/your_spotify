@@ -31,7 +31,9 @@ Start the application:
 docker compose up -d
 ```
 
-Check startup with `docker compose ps` and `docker compose logs --tail=100 mongo app web`. The app waits for MongoDB to become healthy. The database stays in `./db_data`, so do not delete that directory when updating. After pulling code changes, run `docker compose up -d` again; Compose rebuilds the application images from this checkout.
+Check startup with `docker compose ps` and `docker compose logs --tail=100 mongo app web`. The app waits for MongoDB to become healthy. The database stays in `./db_data`, so do not delete that directory when updating. After pulling code changes, run `docker compose up -d --build` to rebuild the application images.
+
+If MongoDB reports `No space left on device`, check the filesystem containing `./db_data` with `df -h ./db_data` and `df -i ./db_data`. Free space on that filesystem before restarting with `docker compose up -d`. Do not remove `./db_data` or run `docker compose down -v`, which can delete your listening history.
 
 # Table of contents
 
